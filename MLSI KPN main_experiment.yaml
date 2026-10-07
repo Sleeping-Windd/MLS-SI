@@ -1,0 +1,191 @@
+schema_version: 1
+
+experiment:
+  name: MLSI KPN-main-seed20260922-64
+  task: synthetic_rgb_burst_denoising
+  description: >-
+    Main KPN5 experiment with eight-frame synthetic RGB bursts, explicit
+    map1/map2/map3 temporal relations, and multi-scale encoder injection.
+  seed: 20260922
+  epochs: 64
+  expected_iterations: 40000
+
+reproducibility:
+  python_random_seed: 20260922
+  numpy_random_seed: 20260922
+  torch_random_seed: 20260922
+  torch_cuda_random_seed_all: 20260922
+  cudnn_deterministic: false
+  cudnn_benchmark: null
+  deterministic_algorithms: false
+  note: >-
+    The seeds are fixed by train_eval_syn.py. Multi-GPU CUDA execution is not
+    guaranteed to be bitwise deterministic because deterministic algorithms
+    were not forced in the reported experiment.
+
+model:
+  module: KPN5
+  class: KPN
+  color: true
+  burst_length: 8
+  reference_frame_index: 0
+  blind_estimation: false
+  input_channels: 27
+  kernel_sizes: [5]
+  separable_convolution: false
+  core_bias: false
+  upsampling_mode: bilinear
+  channel_attention: false
+  spatial_attention: false
+  temporal_maps: [map1, map2, map3]
+  temporal_map_definitions:
+    map1: "(reference + neighbour) / 2"
+    map2: "neighbour - reference"
+    map3: "reference * neighbour / (reference^2 + neighbour^2 + 1e-6)"
+  temporal_injection:
+    conv1:
+      enabled: true
+      pooling_factor: 2
+      channel_gate: true
+    conv2:
+      enabled: true
+      pooling_factor: 2
+    conv3:
+      enabled: true
+      pooling_factor: 4
+    conv4:
+      enabled: true
+      pooling_factor: 8
+    conv5:
+      enabled: false
+
+data:
+  source: OpenImages
+  train_directory: ../dataset/Adobe5K_40k
+  train_images: 40000
+  train_list: ../dataset/openimages_meta/openimages_success_40k_seed20260612_newfolder.txt
+  image_formats: [.jpg, .jpeg, .png, .bmp]
+  minimum_source_size: [640, 640]
+  patch_size: 128
+  generation_upscale: 4
+  degamma_to_linear: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.5
+  shuffle: true
+  num_workers: 8
+  burst_generation:
+    frames: 8
+    reference_frame: 0
+    reference_crop: centered
+    small_jitter_pixels: 2
+    large_jitter_pixels: 16
+    large_jitter_sampling: "Bernoulli(min(1, Poisson(1.5) / 8)) per non-reference frame"
+
+synthetic_noise:
+  model: heteroscedastic_gaussian
+  equation: "noisy ~ Normal(clean, sqrt(sigma_read^2 + clean * sigma_shot))"
+  white_level:
+    distribution: log_uniform
+    minimum: 0.1
+    maximum: 1.0
+    shared_across_burst: true
+  sigma_read:
+    distribution: log10_uniform
+    log10_minimum: -3.0
+    log10_maximum: -1.5
+    shared_across_burst: true
+  sigma_shot:
+    distribution: log10_uniform
+    log10_minimum: -2.0
+    log10_maximum: -1.0
+    shared_across_burst: true
+  noise_realizations_independent_across_frames: true
+  clamp_range: [0.0, 1.0]
+  append_three_channel_noise_estimate: true
+
+training:
+  batch_size: 64
+  multi_gpu: true
+  parallelism: torch.nn.DataParallel
+  gpu_count_reported: 2
+  image_width: 128
+  image_height: 128
+  restart_from_scratch: true
+  optimizer:
+    name: Adam
+    learning_rate: 0.0002
+    betas: [0.9, 0.999]
+    epsilon: 1.0e-8
+    weight_decay_effective: 0.0
+    note: >-
+      The legacy .conf contains weight_decay=1e-4, but train_eval_syn.py does
+      not pass weight_decay to torch.optim.Adam. The effective reported setting
+      is therefore zero.
+  learning_rate_scheduler:
+    name: StepLR
+    step_size_epochs: 10
+    gamma: 0.89125093813
+    minimum_learning_rate: 5.0e-6
+    step_timing: start_of_epoch
+  loss:
+    total: "loss_basic + loss_anneal"
+    basic:
+      coefficient: 1.0
+      terms: [pixel_mse, gradient_l1]
+    annealed_per_frame:
+      coefficient: 1.0
+      frame_loss_terms: [pixel_mse, gradient_l1]
+      alpha: 0.9998
+      beta: 100.0
+      formula: "100 * 0.9998^global_step * mean(per_frame_loss)"
+
+checkpointing:
+  directory: models/kpn/checkpoint/kpn5-full-seed20260922-64
+  save_every_iterations: 200
+  keep_last_numbered_checkpoints: 20
+  model_best_filename: model_best.pth.tar
+  selected_checkpoints:
+    epoch_32: 020000.pth.tar
+    historical_epoch_63_step: 039200.pth.tar
+    epoch_64: 040000.pth.tar
+  epoch_field_is_zero_based: true
+
+logging:
+  tensorboard_directory: models/kpn/logs/kpn5-full-seed20260922-64
+  console_log: models/kpn/ablation_train_logs/kpn5-full-seed20260922-64.log
+
+evaluation:
+  protocol: frozen_test_set
+  frozen_test_directory: ../dataset/kpn_frozen_test_10k_seed20260609
+  frozen_test_seed: 20260609
+  samples: 10000
+  batch_size: 8
+  num_workers: 8
+  data_parallel: true
+  save_predictions: false
+  metrics:
+    psnr:
+      direction: higher
+    ssim:
+      direction: higher
+    lpips:
+      direction: lower
+      backbone: alex
+    fid:
+      direction: lower
+      feature_dimension: 2048
+      batch_size: 32
+  output_directory: models/kpn/frozen_test_results/KPN5-FULL-S20260922-64-frozen10k
+
+split_integrity:
+  train_test_image_id_overlap: 0
+  train_validation_image_id_overlap: 0
+  validation_test_image_id_overlap: 0
+
+implementation:
+  current_runner_config: kpn_specs/kpn5-full-seed20260922-64.conf
+  yaml_consumed_directly_by_train_eval_syn: false
+  note: >-
+    This YAML is the public, machine-readable experiment manifest. The current
+    training entry point still reads ConfigObj .conf files; keep the matching
+    .conf or add a YAML adapter before passing this file directly to the runner.
