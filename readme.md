@@ -24,16 +24,23 @@ The original feature extraction pathway is retained, so MLSI complements rather 
 
 ## Code Base
 
-This implementation is developed based on the open-source KPN reproduction repository:
+The base KPN reproduction code is from:
 
-> **KPN_Denoising_Pytorch**  
-> https://github.com/WenxueCui/KPN_Denoising_Pytorch  
-> by Wenxue Cui
+> WenxueCui/KPN_Denoising_Pytorch  
+> https://github.com/WenxueCui/KPN_Denoising_Pytorch
 
-That repository is a PyTorch reimplementation of:
+That repository does not include a license. Therefore, this repository
+does **not** redistribute its source code. To run our method, please first
+clone the original repository, then integrate the MLSI modules provided here
+following the instructions below.
 
-> B. Mildenhall, J. T. Barron, J. Chen, D. Sharlet, R. Ng, R. Carroll,  
-> *Burst Denoising with Kernel Prediction Networks*, CVPR 2018.
+Our contribution is the MLSI mechanism and its integration code, including:
+- `models/MLSI_KPN.py`
+- `configs/kpn_mlsi.yaml`
+- `train_mlsi.py`
+- `evaluate_mlsi.py`
+
+We thank the author of the original repository for making the code publicly available.
 
 Starting from that codebase, we introduce the proposed MLSI mechanism. The main modifications include:
 
